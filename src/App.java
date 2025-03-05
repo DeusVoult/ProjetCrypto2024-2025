@@ -6,8 +6,12 @@ public class App {
         }else{
         switch(args[0]){
             case "validate-cert":
-                exo31 exo = new exo31();
-                exo.validatecert(args);
+                exo31 exo1 = new exo31();
+                exo1.validatecert(args);
+                break;
+            case "validate-cert-chain":
+                exo32 exo2 = new exo32();
+                exo2.validatecertchain(args);
                 break;
             default:
                 System.out.println("Unknown command");
