@@ -1,22 +1,22 @@
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
+import java.security.Security;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.util.ArrayList;
 import java.math.BigInteger;
 
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.ASN1Sequence;
+import org.bouncycastle.jcajce.provider.asymmetric.util.EC5Util;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.jce.provider.JCEECPublicKey;
 import org.bouncycastle.math.ec.ECPoint;
 import org.bouncycastle.jce.spec.ECParameterSpec;
-import org.bouncycastle.jce.ECPointUtil;
 
 
 public class exo32 {
@@ -92,18 +92,22 @@ public class exo32 {
                         System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
                                         " possède une signature RSA valide");
                     }
-                }else if (currentCert.getSigAlgName().contains("ECDSA")) {
-                    java.security.interfaces.ECPublicKey jvpubKey = (java.security.interfaces.ECPublicKey) issuerCert.getPublicKey();
-                    ECPublicKey bcpubkey = convertToBouncyCastleKey(jvpubKey);
-                    boolean validECDSA = verifyECDSASignature(currentCert, bcpubkey);
-                    if (!validECDSA) {
-                        System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
-                                        " possède une signature ECDSA invalide");
-                        return false;
-                    } else {
-                        System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
-                                        " possède une signature ECDSA valide");
-                    }
+            }else if (currentCert.getSigAlgName().contains("ECDSA")) {
+                if (Security.getProvider("BC") == null) {
+                    Security.addProvider(new BouncyCastleProvider());
+                }
+                boolean validECDSA = verifyECDSASignature(currentCert, (java.security.interfaces.ECPublicKey) issuerCert.getPublicKey());
+                if (!validECDSA) {
+                    System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
+                                    " possède une signature ECDSA invalide");
+                    return false;
+                } else {
+                    System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
+                                    " possède une signature ECDSA valide");
+                }
+            }else{
+                System.out.println("Algorithme de signature non supporté");
+                return false;
             }
         }
         //3.2.4 + 3.2.5
@@ -117,7 +121,8 @@ public class exo32 {
                     System.out.println("\nCertificat "+ cert.getSubjectX500Principal() + " possède bien les keyusages d'une certificate authority ROOT\n| Basic Constraints attendu Integer.MAX_VALUE (2147483647) : "+basicConstraints+"\n| Key_CertSign : " 
                     + keyUsage[5] + "\n| Crl_Sign : " +keyUsage[6]);
             }else{
-                System.out.println("Certificat "+ cert.getSubjectX500Principal() + " ne possède pas les keyusages d'une certificate authority ROOT ou la valeur du basicConstraints est erronée");
+                System.out.println("\nCertificat "+ cert.getSubjectX500Principal() + "ne possède pas les keyusages d'une certificate authority ROOT\n| Basic Constraints attendu Integer.MAX_VALUE (2147483647) : "+basicConstraints+"\n| Key_CertSign : " 
+                    + keyUsage[5] + "\n| Crl_Sign : " +keyUsage[6]);
                 return false;
                 }
             }
@@ -127,20 +132,24 @@ public class exo32 {
                     System.out.println("\nCertificat "+ cert.getSubjectX500Principal() + " possède bien les keyusages d'une CA\n| Basic Constraints attendu >=0 : "+basicConstraints+"\n| Key_CertSign : " 
                     + keyUsage[5] + "\n| Crl_Sign : " +keyUsage[6]);
             }else{
-                System.out.println("Certificat "+ cert.getSubjectX500Principal() + " ne possède pas les keyusages d'une CA ou la valeur du basicConstraints est erronée");
+                System.out.println("\nCertificat "+ cert.getSubjectX500Principal() + " ne possède pas les keyusages pour une CA\n| Basic Constraints attendu >=0 : "+basicConstraints+"\n| Key_CertSign : " 
+                    + keyUsage[5] + "\n| Crl_Sign : " +keyUsage[6]);
                 return false;
             }
             }
             //End certificate
             else if (basicConstraints == -1) {
-                if(keyUsage[0] && keyUsage[2]){
+                if(keyUsage[0] || (keyUsage[0] && keyUsage[2])){
                     System.out.println("\nCertificat "+ cert.getSubjectX500Principal() + " possède bien les keyusages d'un certificat serveur standard\n| Basic Constraints attendu = -1 : "+basicConstraints+"\n| DigitalSignature : " 
                     + keyUsage[0] + "\n| KeyEncipherment : " +keyUsage[2]);
             }else{
-                System.out.println("Certificat "+ cert.getSubjectX500Principal() + " ne possède pas les keyusages d'un certificat serveur standard ou la valeur du basicConstraints est erronée");
+                System.out.println("\nCertificat "+ cert.getSubjectX500Principal() + "ne possède pas les keyusages pour un certificat serveur standard\n| Basic Constraints attendu = -1 : "+basicConstraints+"\n| DigitalSignature : " 
+                    + keyUsage[0] + "\n| KeyEncipherment : " +keyUsage[2]);
                 return false;
                 }
-            }
+            }else{
+                System.out.println("Basic Constraints invalide");
+                return false;}
             }
             return true;
         }
@@ -237,7 +246,7 @@ public class exo32 {
                     hashLength = 64;
                     break;
                 default:
-                    System.out.println("Unsupported hash algorithm");
+                    System.out.println("Algo de hash pas supporté : " + hashAlgorithm);
                     return false;
             }
             
@@ -251,7 +260,7 @@ public class exo32 {
             }
             
             if (hashPosition == -1) {
-                System.out.println("Couldn't find hash value in DigestInfo");
+                System.out.println("Impossible de trouver le hash du digestInfo");
                 return false;
             }
             
@@ -271,7 +280,17 @@ public class exo32 {
     }
     //fonction pour vérifier ECDSA
     
-    public boolean verifyECDSASignature(X509Certificate cert, ECPublicKey issuerPublicKey) {
+    public boolean verifyECDSASignature(X509Certificate cert, java.security.interfaces.ECPublicKey issuerPublicKeytoformat) {
+        java.security.spec.ECParameterSpec jdkSpec = issuerPublicKeytoformat.getParams();
+        org.bouncycastle.jce.spec.ECParameterSpec bcSpec = EC5Util.convertSpec(jdkSpec);
+        // Convert public point
+        java.security.spec.ECPoint jdkQ = issuerPublicKeytoformat.getW();
+        ECPoint bcQ = EC5Util.convertPoint(bcSpec.getCurve(), jdkQ);
+        // Create BC public key
+        ECPublicKey ECissuerPublicKey = new JCEECPublicKey(
+            "ECDSA",
+            new org.bouncycastle.jce.spec.ECPublicKeySpec(bcQ, bcSpec)
+        );
         try {
             byte[] tbsCertData = cert.getTBSCertificate();
             byte[] signatureBytes = cert.getSignature();
@@ -306,10 +325,10 @@ public class exo32 {
             aIn.close();
     
             // Get curve parameters from public key
-            ECParameterSpec ecParams = ((ECPublicKey)issuerPublicKey).getParameters();
+            ECParameterSpec ecParams = ((ECPublicKey)ECissuerPublicKey).getParameters();
             ECPoint G = ecParams.getG();
             BigInteger n = ecParams.getN();
-            ECPoint Q = ((ECPublicKey)issuerPublicKey).getQ();
+            ECPoint Q = ((ECPublicKey)ECissuerPublicKey).getQ();
     
             // Verify s is within range
             if (s.compareTo(BigInteger.ONE) < 0 || s.compareTo(n) >= 0) {
@@ -348,24 +367,7 @@ public class exo32 {
         }
     }
 
-    private ECPublicKey convertToBouncyCastleKey(java.security.interfaces.ECPublicKey jdkKey) {
-    try {
-        java.security.spec.ECParameterSpec jdkParams = jdkKey.getParams();
-        java.security.spec.ECPoint jdkW = jdkKey.getW();
-        
-        // Convert curve parameters
-        org.bouncycastle.jce.spec.ECParameterSpec bcParams = 
-            org.bouncycastle.jcajce.provider.asymmetric.util.EC5Util.convertSpec(jdkParams, false);
-        
-        // Convert public point
-        org.bouncycastle.math.ec.ECPoint bcW = 
-            org.bouncycastle.jcajce.provider.asymmetric.util.EC5Util.convertPoint(jdkParams, jdkW, false);
-            
-        return new JCEECPublicKey("ECDSA", bcW, bcParams);
-    } catch (Exception e) {
-        throw new RuntimeException("Failed to convert key", e);
-    }
-}
+   
 
 }
 
