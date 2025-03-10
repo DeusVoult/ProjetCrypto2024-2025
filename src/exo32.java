@@ -4,16 +4,19 @@ import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
-//import java.security.interfaces.ECPublicKey;
 import java.util.ArrayList;
 import java.math.BigInteger;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
-import org.bouncycastle.jce.spec.ECParameterSpec;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.jce.provider.JCEECPublicKey;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.jce.spec.ECParameterSpec;
+import org.bouncycastle.jce.ECPointUtil;
 
 
 public class exo32 {
@@ -90,7 +93,9 @@ public class exo32 {
                                         " possède une signature RSA valide");
                     }
                 }else if (currentCert.getSigAlgName().contains("ECDSA")) {
-                    boolean validECDSA = verifyECDSASignature(currentCert, (org.bouncycastle.jce.interfaces.ECPublicKey) issuerCert.getPublicKey());
+                    java.security.interfaces.ECPublicKey jvpubKey = (java.security.interfaces.ECPublicKey) issuerCert.getPublicKey();
+                    ECPublicKey bcpubkey = convertToBouncyCastleKey(jvpubKey);
+                    boolean validECDSA = verifyECDSASignature(currentCert, bcpubkey);
                     if (!validECDSA) {
                         System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
                                         " possède une signature ECDSA invalide");
@@ -342,6 +347,25 @@ public class exo32 {
             return false;
         }
     }
+
+    private ECPublicKey convertToBouncyCastleKey(java.security.interfaces.ECPublicKey jdkKey) {
+    try {
+        java.security.spec.ECParameterSpec jdkParams = jdkKey.getParams();
+        java.security.spec.ECPoint jdkW = jdkKey.getW();
+        
+        // Convert curve parameters
+        org.bouncycastle.jce.spec.ECParameterSpec bcParams = 
+            org.bouncycastle.jcajce.provider.asymmetric.util.EC5Util.convertSpec(jdkParams, false);
+        
+        // Convert public point
+        org.bouncycastle.math.ec.ECPoint bcW = 
+            org.bouncycastle.jcajce.provider.asymmetric.util.EC5Util.convertPoint(jdkParams, jdkW, false);
+            
+        return new JCEECPublicKey("ECDSA", bcW, bcParams);
+    } catch (Exception e) {
+        throw new RuntimeException("Failed to convert key", e);
+    }
+}
 
 }
 
