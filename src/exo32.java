@@ -45,8 +45,8 @@ public class exo32 {
                 }
         };
         //3.2.1
-        //check le reste de la chaine en commencant par la fin de la liste pour être dans le bon sens (sauf ROOT car spécial)
-        System.out.println("\n======================================\nVerify Issuer Emetteur\n======================================");
+        //Check Issuer = Emetteur
+        System.out.println("\n======================================\nVerification Issuer=Emetteur\n======================================");
         for (int i = certList.size() - 1; i >= 0; i--) {
             X509Certificate currentCert = certList.get(i);
             X509Certificate issuerCert;
@@ -71,18 +71,19 @@ public class exo32 {
                 return false;
             }
         }
-        System.out.println("\n======================================\nVerify Signature\n======================================");     
-        //3.2.2 Vérification Signature RSA avec BigInteger
+        System.out.println("\n======================================\nVerification Signature\n======================================");     
+        //3.2.2 
+        //Vérification Signature RSA avec BigInteger
         for (int i = certList.size() - 1; i >= 0; i--) {
             X509Certificate currentCert = certList.get(i);
             X509Certificate issuerCert;
-            // SI root, alors l'issuer c'est lui même
             if (i == 0) {
                 issuerCert = currentCert;
             } else {
                 issuerCert = certList.get(i - 1);
             }
             if (currentCert.getSigAlgName().contains("RSA")) {
+                System.out.println("\n======================================\nSignature RSA\n======================================");   
                     boolean validRSA = verifyRSASignature(currentCert,(RSAPublicKey) issuerCert.getPublicKey());
                     if (!validRSA) {
                         System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
@@ -92,7 +93,11 @@ public class exo32 {
                         System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
                                         " possède une signature RSA valide");
                     }
-            }else if (currentCert.getSigAlgName().contains("ECDSA")) {
+            }
+            //3.2.3
+            //Vérification Signature ECDSA
+            else if (currentCert.getSigAlgName().contains("ECDSA")) {
+                System.out.println("\n======================================\nSignature ECDSA\n======================================");   
                 if (Security.getProvider("BC") == null) {
                     Security.addProvider(new BouncyCastleProvider());
                 }
@@ -111,7 +116,8 @@ public class exo32 {
             }
         }
         //3.2.4 + 3.2.5
-        System.out.println("\n======================================\nVerify Key Usage + Basic Constraints\n======================================");
+        //Verifier BasicConstraints incluants key usages
+        System.out.println("\n======================================\nVerification Key Usage + Basic Constraints\n======================================");
         for ( X509Certificate cert : certList ) {
             //Root
             boolean[] keyUsage = cert.getKeyUsage();
@@ -153,8 +159,6 @@ public class exo32 {
             }
             return true;
         }
-    
-         // EXO 3.3
 
     //fonction pour vérifier la signature RSA
     public boolean verifyRSASignature(X509Certificate cert,RSAPublicKey pubKey) {
@@ -279,7 +283,6 @@ public class exo32 {
         }
     }
     //fonction pour vérifier ECDSA
-    
     public boolean verifyECDSASignature(X509Certificate cert, java.security.interfaces.ECPublicKey issuerPublicKeytoformat) {
         java.security.spec.ECParameterSpec jdkSpec = issuerPublicKeytoformat.getParams();
         org.bouncycastle.jce.spec.ECParameterSpec bcSpec = EC5Util.convertSpec(jdkSpec);

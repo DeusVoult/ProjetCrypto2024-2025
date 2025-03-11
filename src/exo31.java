@@ -8,7 +8,6 @@ import java.util.Date;
 
 public class exo31 {
     String filename=null;
-    int Anomalie=0;
     public boolean validatecert(String[] args) {
         //3.1.1
         switch(args[2]){
@@ -20,8 +19,7 @@ public class exo31 {
                 break;
             default :
                 System.out.println("Unknown certificate format");
-                Anomalie++;
-                break;
+                return false;
         }
         try (InputStream inStream = new FileInputStream(filename)) {
             CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
@@ -34,8 +32,8 @@ public class exo31 {
                     cert.verify(publicKey);
                     System.out.println("OK | Certificat Valide");
                 } catch (Exception e) {
-                    System.out.println("KO | Verification Echouée: " + e.getMessage());
-                    Anomalie++;
+                    System.out.println("KO | Certificat invalide: " + e.getMessage());
+                    return false;
                 }
                 //3.1.3
                 System.out.println("\nSujet : " + cert.getSubjectX500Principal());
@@ -47,7 +45,7 @@ public class exo31 {
                         System.out.println("\nKeyUsage Valide : \nKey_CertSign : " + keyUsage[5] + "\nCrl_Sign : " +keyUsage[6] +"\nDigital_Signature : " + keyUsage[7]);
                     } else{
                         System.out.println("KeyUsage Invalide");
-                        Anomalie++;
+                        return false;
                     }
                 }
                 //3.1.5
@@ -58,7 +56,7 @@ public class exo31 {
                     System.out.println("Certificat Toujours valide jusqu'au : " + notAfter);
                 }else{
                     System.out.println("Certificat Expiré");
-                    Anomalie++;
+                    return false;
                 }
                 //3.1.6
                 byte[] tbsData = cert.getTBSCertificate();
@@ -85,8 +83,7 @@ public class exo31 {
                         break;
                     default:
                         System.out.println("Algorithme de Signature Inconnu");
-                        Anomalie++;
-                        break;
+                        return false;
                 }
                 if (sign != null) {
                 sign.initVerify(publicKey);
@@ -96,22 +93,16 @@ public class exo31 {
                     System.out.println("Signature "+ certSignAlg +" Valide");
                 }else{
                     System.out.println("Signature Invalide");
-                    Anomalie++;
+                    return false;
                 }
                 }else{
                     System.out.println("Aucune signature dans ce certificat");
                 }
             }else{
                 System.out.println("Certificate est nulle");
-                Anomalie++;
-            }
-            if (Anomalie==0){
-                System.out.println("Ce certificat a passé tous les tests avec succès");
-                return true;
-            }else{
-                System.out.println("Ce Certificat est invalide");
                 return false;
             }
+            return true;
         } catch (Exception e) {
             e.printStackTrace();
             return false;
