@@ -11,9 +11,12 @@ public class App {
                 break;
             case "validate-cert-chain":
                 exo32 exo2 = new exo32();
-                exo33 exo3 = new exo33();
                 exo2.validatecertchain(args);
-                //exo3.revokationcertchain(args);
+                break;
+
+            case "revokation-cert-chain":
+                exo33 exo3 = new exo33();
+                exo3.revokationcertchain(args);
                 break;
             default:
                 System.out.println("Unknown command");
