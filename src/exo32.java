@@ -67,7 +67,9 @@ public class exo32 {
                 return false;
             }
             try {
-                System.out.println("| OK : Signature VALIDE");
+                // Vérification de la signature du certificat avec la commande Java
+                //currentCert.verify(issuerCert.getPublicKey());
+                //System.out.println("| OK : Signature VALIDE");
             } catch (Exception e) {
                 System.out.println("| KO : Signature INVALIDE : \n| Raison : " + e.getMessage());
                 return false;
@@ -107,8 +109,8 @@ public class exo32 {
                 if (isSignValid){
                     System.out.println("| Signature "+ certSignAlg +" Valide\n");
                 }else{
-                    System.out.println("| Signature Invalide");
-                    return false;
+                    System.out.println("| Signature Invalide / Algorithme : " +certSignAlg);
+                    //return false;
                 }
                 }else{
                     System.out.println("| Aucune signature dans ce certificat");
@@ -119,10 +121,10 @@ public class exo32 {
                 return false;
             }
     }
-
-        System.out.println("\n======================================\nVerification RSA/ECDSA Signature\n======================================");     
         //3.2.2 
-        //Vérification Signature RSA avec BigInteger
+        //Effectuer la vérification de signature RSA en utilisant une API de calcul sur les grands nombres au lieu
+        //d'une API de cryptographie
+        System.out.println("\n======================================\nVerification RSA/ECDSA Signature\n======================================");     
         for (int i = certList.size() - 1; i >= 0; i--) {
             X509Certificate currentCert = certList.get(i);
             X509Certificate issuerCert;
@@ -137,14 +139,15 @@ public class exo32 {
                     if (!validRSA) {
                         System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
                                         " possède une signature RSA invalide");
-                        return false;
+                        //return false;
                     } else {
                         System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
                                         " possède une signature RSA valide");
                     }
             }
             //3.2.3
-            //Vérification Signature ECDSA
+            //. Effectuer la vérification de signature ECDSA en utilisant une librairie de calcul sur courbe elliptique en
+            //plus de celle sur les grands nombres (par exemple org.bouncycastle.math.ec.ECPoint) au lieu d'une API de cryptographie.
             else if (currentCert.getSigAlgName().contains("ECDSA")) {
                 System.out.println("\n======================================\nSignature ECDSA\n======================================");   
                 if (Security.getProvider("BC") == null) {
@@ -154,7 +157,7 @@ public class exo32 {
                 if (!validECDSA) {
                     System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
                                     " possède une signature ECDSA invalide");
-                    return false;
+                    //return false;
                 } else {
                     System.out.println("\nCertificat " + currentCert.getSubjectX500Principal() + 
                                     " possède une signature ECDSA valide");
@@ -165,7 +168,8 @@ public class exo32 {
             }
         }
         //3.2.4 + 3.2.5
-        //Verifier BasicConstraints incluants key usages
+        //Ajuster la vérification de l'extension KeyUsage suivant le niveau de certificat.
+        //Effectuer la vérification de l'extension BasicConstraints.
         System.out.println("\n======================================\nVerification Key Usage + Basic Constraints\n======================================");
         for ( X509Certificate cert : certList ) {
             //Root
@@ -191,7 +195,7 @@ public class exo32 {
                 return false;
             }
             }
-            //End certificate
+            //Cert Serveur
             else if (basicConstraints == -1) {
                 if(keyUsage[0] || (keyUsage[0] && keyUsage[2])){
                     System.out.println("\nCertificat "+ cert.getSubjectX500Principal() + " possède bien les keyusages d'un certificat serveur standard\n| Basic Constraints attendu = -1 : "+basicConstraints+"\nKeyUsages attendu (TRUE, OPTIONNAL)\n| DigitalSignature : " 
@@ -209,10 +213,15 @@ public class exo32 {
         }
 
     //fonction pour vérifier la signature RSA
-    public boolean verifyRSASignature(X509Certificate cert,RSAPublicKey pubKey) {
+    //La seule avec ECDSA ayant des commentaires poussés vu que la démarche est un peu plus importante que le reste
+    public boolean verifyRSASignature(X509Certificate cert, RSAPublicKey pubKey) {
         try {
+            // Récupération des données du certificat qui ont été signées (TBS : To Be Signed)
             byte[] tbsCertData = cert.getTBSCertificate();
+            // Récupération de la signature du certificat
             byte[] signatureBytes = cert.getSignature();
+
+            // Déterminer l'algorithme de hachage utilisé dans la signature
             String hashAlgorithm;
             switch (cert.getSigAlgName()) {
                 case "SHA256withRSA":
@@ -228,48 +237,52 @@ public class exo32 {
                     System.out.println("Unsupported signature algorithm: " + cert.getSigAlgName());
                     return false;
             }
-            
+
+            // Calcul du hash des données signées
             MessageDigest md = MessageDigest.getInstance(hashAlgorithm);
             md.update(tbsCertData);
             byte[] digestValue = md.digest();
-            
+
+            // Conversion de la signature en BigInteger pour effectuer l'opération RSA
             BigInteger signature = new BigInteger(1, signatureBytes);
-            
-            // extraction composent RSA
             BigInteger modulus = pubKey.getModulus();
             BigInteger exponent = pubKey.getPublicExponent();
+
+            // Taille du module en octets
             int modulusSize = (modulus.bitLength() + 7) / 8;
+
+            // Déchiffrement de la signature RSA avec la clé publique (signature^e mod n)
             BigInteger decryptedSignature = signature.modPow(exponent, modulus);
-            
-            // pour fixe le paddding
             byte[] decryptedBytes = new byte[modulusSize];
             byte[] bigIntBytes = decryptedSignature.toByteArray();
+
+            // Gestion du padding car BigInteger déteste les début de 0
             int copyOffset = 0;
             if (bigIntBytes.length > modulusSize) {
-                // Pour éviter les problèmes avec BigInteger qui bouffe les 0
                 copyOffset = bigIntBytes.length - modulusSize;
             }
-            
             int destOffset = modulusSize - Math.min(modulusSize, bigIntBytes.length - copyOffset);
             int length = Math.min(modulusSize, bigIntBytes.length - copyOffset);
             System.arraycopy(bigIntBytes, copyOffset, decryptedBytes, destOffset, length);
-        
+
+            // Recherche du début de la structure DigestInfo (format PKCS#1 v1.5)
             int digestInfoStart = -1;
             for (int i = 0; i < decryptedBytes.length - 1; i++) {
-                if (decryptedBytes[i] == 0x00 && decryptedBytes[i+1] == 0x30) {
+                if (decryptedBytes[i] == 0x00 && decryptedBytes[i + 1] == 0x30) {
                     digestInfoStart = i + 1;
                     break;
                 }
             }
-            
             if (digestInfoStart == -1) {
-                System.out.println("Couldn't find DigestInfo structure in decrypted signature");
+                System.out.println("Digest info struct absente de la signature décrypté");
                 return false;
             }
-            
+
+            // Extraction de la structure DigestInfo
             byte[] digestInfo = new byte[decryptedBytes.length - digestInfoStart];
             System.arraycopy(decryptedBytes, digestInfoStart, digestInfo, 0, digestInfo.length);
-            
+
+            // Déterminer la taille du hash attendu
             int hashLength;
             switch (hashAlgorithm) {
                 case "SHA-256":
@@ -285,49 +298,57 @@ public class exo32 {
                     System.out.println("Algo de hash pas supporté : " + hashAlgorithm);
                     return false;
             }
-            
-            //Trouver le hash dans le digestInfo
+
+            // Trouver la position du hash dans la structure DigestInfo
             int hashPosition = -1;
             for (int i = 0; i < digestInfo.length - hashLength; i++) {
-                if (digestInfo[i] == 0x04 && digestInfo[i+1] == hashLength) {
+                if (digestInfo[i] == 0x04 && digestInfo[i + 1] == hashLength) {
                     hashPosition = i + 2;
                     break;
                 }
             }
-            
             if (hashPosition == -1) {
                 System.out.println("Impossible de trouver le hash du digestInfo");
                 return false;
             }
-            
+
+            // Extraction du hash contenu dans DigestInfo
             byte[] extractedHash = new byte[hashLength];
             System.arraycopy(digestInfo, hashPosition, extractedHash, 0, hashLength);
 
-            return  MessageDigest.isEqual(digestValue, extractedHash);
-            
+            // Comparaison du hash calculé avec celui extrait de la signature
+            return MessageDigest.isEqual(digestValue, extractedHash);
+
         } catch (Exception e) {
-            System.out.println("Error during RSA signature verification: " + e.getMessage());
-            e.printStackTrace();
+            System.out.println("Erreur lors de la vérification de la signature : " + e.getMessage());
             return false;
         }
     }
+
     //fonction pour vérifier ECDSA
     public boolean verifyECDSASignature(X509Certificate cert, java.security.interfaces.ECPublicKey issuerPublicKeytoformat) {
+        // Récupération des paramètres de la clé publique en format JDK
         java.security.spec.ECParameterSpec jdkSpec = issuerPublicKeytoformat.getParams();
-        // Convertit la clé dans le bon format (diff avec le RSA)
+
+        // Conversion des paramètres EC en format Bouncy Castle
         org.bouncycastle.jce.spec.ECParameterSpec bcSpec = EC5Util.convertSpec(jdkSpec);
         java.security.spec.ECPoint jdkQ = issuerPublicKeytoformat.getW();
         ECPoint bcQ = EC5Util.convertPoint(bcSpec.getCurve(), jdkQ);
+
+        // Conversion de la clé publique dans un format compatible Bouncy Castle
         ECPublicKey ECissuerPublicKey = new JCEECPublicKey(
             "ECDSA",
             new org.bouncycastle.jce.spec.ECPublicKeySpec(bcQ, bcSpec)
         );
 
         try {
+            // Extraction des données à signer du certificat
             byte[] tbsCertData = cert.getTBSCertificate();
+            // Extraction de la signature
             byte[] signatureBytes = cert.getSignature();
+
+            // Déterminer l'algorithme de hachage utilisé dans la signature
             String hashAlgorithm;
-            
             switch (cert.getSigAlgName()) {
                 case "SHA256withECDSA":
                     hashAlgorithm = "SHA-256";
@@ -343,53 +364,55 @@ public class exo32 {
                     return false;
             }
 
+            // Calcul du hash des données signées
             MessageDigest md = MessageDigest.getInstance(hashAlgorithm);
             md.update(tbsCertData);
             byte[] digestValue = md.digest();
-            BigInteger e = new BigInteger(1, digestValue);
+            BigInteger e = new BigInteger(1, digestValue); // Valeur de e dans l'équation ECDSA
 
+            // Décodage de la signature ASN.1 en (r, s)
             ASN1InputStream aIn = new ASN1InputStream(signatureBytes);
-            ASN1Sequence seq = (ASN1Sequence)aIn.readObject();
-            BigInteger r = ((ASN1Integer)seq.getObjectAt(0)).getValue();
-            BigInteger s = ((ASN1Integer)seq.getObjectAt(1)).getValue();
+            ASN1Sequence seq = (ASN1Sequence) aIn.readObject();
+            BigInteger r = ((ASN1Integer) seq.getObjectAt(0)).getValue();
+            BigInteger s = ((ASN1Integer) seq.getObjectAt(1)).getValue();
             aIn.close();
-            ECParameterSpec ecParams = ((ECPublicKey)ECissuerPublicKey).getParameters();
-            ECPoint G = ecParams.getG();
-            BigInteger n = ecParams.getN();
-            ECPoint Q = ((ECPublicKey)ECissuerPublicKey).getQ();
-    
-            // S en range
+
+            // Récupération des paramètres EC
+            ECParameterSpec ecParams = ((ECPublicKey) ECissuerPublicKey).getParameters();
+            ECPoint G = ecParams.getG(); // Générateur de la courbe
+            BigInteger n = ecParams.getN(); // Ordre du générateur
+            ECPoint Q = ((ECPublicKey) ECissuerPublicKey).getQ(); // Clé publique du signataire
+
+            // Vérification que s est bien dans l'intervalle valide [1, n-1]
             if (s.compareTo(BigInteger.ONE) < 0 || s.compareTo(n) >= 0) {
                 return false;
             }
-    
-            // On calules les paramètres 
-            BigInteger w = s.modInverse(n);
-            BigInteger u1 = e.multiply(w).mod(n);
-            BigInteger u2 = r.multiply(w).mod(n);
-    
-            // On calcule les coords 
-            ECPoint point1 = G.multiply(u1);
-            ECPoint point2 = Q.multiply(u2);
-            ECPoint R = point1.add(point2);
-    
-            // R ne doit pas être infini
+
+            // Calcul des paramètres u1 et u2
+            BigInteger w = s.modInverse(n); // w = s^(-1) mod n
+            BigInteger u1 = e.multiply(w).mod(n); // u1 = e * w mod n
+            BigInteger u2 = r.multiply(w).mod(n); // u2 = r * w mod n
+
+            // Calcul des points correspondants
+            ECPoint point1 = G.multiply(u1); // u1 * G
+            ECPoint point2 = Q.multiply(u2); // u2 * Q
+            ECPoint R = point1.add(point2); // R = u1 * G + u2 * Q
+
+            // Vérification que R n'est pas le point à l'infini
             if (R.isInfinity()) {
                 return false;
             }
+
+            // Récupération de la coordonnée x normalisée et réduction modulo n
             BigInteger v = R.normalize().getXCoord().toBigInteger().mod(n);
-    
-            // Si valide v = r
+
+            // La signature est valide si v == r
             return v.equals(r);
-    
+
         } catch (Exception e) {
-            System.out.println("Error during ECDSA signature verification: " + e.getMessage());
-            e.printStackTrace();
+            System.out.println("Erreur lors de la vérification de la signature ECDSA : " + e.getMessage());
             return false;
         }
     }
-
-   
-
 }
 

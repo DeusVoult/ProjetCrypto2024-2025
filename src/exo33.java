@@ -34,6 +34,7 @@ import org.bouncycastle.cert.ocsp.OCSPResp;
 import org.bouncycastle.cert.ocsp.SingleResp;
 import org.bouncycastle.operator.bc.BcDigestCalculatorProvider;
 
+
 public class exo33 {
     List<HashMap<Integer, CertInfo>> CertInfoCache = new ArrayList<HashMap<Integer,CertInfo>>();
     public class CertInfo {
@@ -44,7 +45,6 @@ public class exo33 {
     public boolean revokationcertchain(String[] args) {
         String Format=args[2];
         String certtoconv=null;
-        //Prépare la liste des certificats
         ArrayList<X509Certificate> certList = new ArrayList<X509Certificate>();
         for (int i=3; i<args.length; i++) {
             if (Format.equals("PEM")) {
@@ -65,7 +65,9 @@ public class exo33 {
                     return false;
                 }
         }
-        //Extraire CRL
+        //3.3.1
+        //Ajouter la vérification du status de révocation en téléchargeant la CRL pour chaque certificat (attention à vérifier la 
+        //validité de la CRL dont sa signature).
         System.out.println("\n================================\nExtraction CRL URL\n================================\n");
         for (int i=0; i<3 ;i++){
             HashMap<Integer,CertInfo> cache = new HashMap<Integer,CertInfo>();
@@ -96,7 +98,7 @@ public class exo33 {
                         for (GeneralName genName : names.getNames()) {
                             if (genName.getTagNo() == GeneralName.uniformResourceIdentifier) {
                                 String URL = ((ASN1String) genName.getName()).getString();
-                                System.out.println("| CRL URL: " + URL+"");
+                                System.out.println("| CRL URL: " + URL);
                                 info.crlUrl = URL;
                             }
                         }
@@ -105,7 +107,7 @@ public class exo33 {
             } catch (Exception e) {
                 System.out.println("Erreur lors de l'extraction de l'url de la CRL : " + e.getMessage());
             }
-            //Extraction Ocsp
+            //Extraction Ocsp (3.3.2)
             try {
                 byte[] aiaExtension = certList.get(i).getExtensionValue("1.3.6.1.5.5.7.1.1"); // AIA OID
                 if (aiaExtension == null) {
@@ -128,7 +130,7 @@ public class exo33 {
                         GeneralName name = ad.getAccessLocation();
                         if (name.getTagNo() == GeneralName.uniformResourceIdentifier) {
                             String ocspUrl = name.getName().toString();
-                            System.out.println("| OCSP URL : " + ocspUrl);
+                            System.out.println("| OCSP URL : " + ocspUrl+"\n");
                             info.ocspUrl = ocspUrl;
                         }
                     }
@@ -139,19 +141,21 @@ public class exo33 {
             cache.put(i, info);
             CertInfoCache.add(cache);
             }
-            //DownloadCRL & verification signature
-            System.out.println("\n================================\nTéléchargement & Caching :\n================================\n");
+            // Téléchargement CRL et mise en cache ou utilisation du cache (cache : partie 3.3.3)
+            System.out.println("\n================================\nTéléchargement ou Caching :\n================================\n");
             String path = "CRL";
+            String fileName=null;
             for (int i = 0; i < CertInfoCache.size(); i++) {
                 HashMap<Integer, CertInfo> CRL_Cache = CertInfoCache.get(i);
-                System.out.println("> CRL Cache " + i + ":");
                 for (Map.Entry<Integer, CertInfo> crlinfo : CRL_Cache.entrySet()) {
                     Integer id = crlinfo.getKey();
                     CertInfo info = crlinfo.getValue();
                     String url = info.crlUrl;
                     File file = info.crlFile;
+                    System.out.println("\n================================\nRécupération dans le cache "+ fileName + ":\n================================\n");
                     // Récupération du fichier dans le cache sinon on le retélécharge
-                    String fileName = url.substring(url.lastIndexOf("/") + 1);
+                    if (url.endsWith(".crl")){
+                    fileName = url.substring(url.lastIndexOf("/") + 1);
                     Path savePath = Paths.get(path, fileName);
                     if (Files.exists(savePath)) {
                         file = savePath.toFile();
@@ -166,14 +170,15 @@ public class exo33 {
                             System.out.println("| Téléchargement de la CRL a échoué : " + e.getMessage() + "\n");
                         }
                     }
-                    //Vérification de la CRL téléchargée
+                    //Vérification de la CRL téléchargée (3.3.1)
+                    System.out.println("\n================================\nVérification par CRL et OCSP "+ certList.get(id).getSubjectX500Principal() + ":\n================================");
                     if (file != null) {
                         try (InputStream inStream = new FileInputStream(file)) {
                             CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
                             X509CRL crl = (X509CRL) certificateFactory.generateCRL(inStream);
                             Date date = new Date();
                             if (crl.getNextUpdate().after(date)) {
-                                System.out.println("| CRL Toujours valide ---- date d'update crl : "+ crl.getNextUpdate() + " < " + date);
+                                System.out.println("| CRL Toujours valide ---- date d'update crl : "+ crl.getNextUpdate() + " > " + date);
                                 System.out.println("| CRL_ID: " + id + "\n| CRL_URL : " + url + "\n| CRL_File : " + file +"\n| OCSP_URL : "+ info.ocspUrl);
                                 System.out.println("| Verification pour la CRL de " + certList.get(id).getSubjectX500Principal());
                                 verifyCRL(crl, certList.get(id - 1));
@@ -184,7 +189,7 @@ public class exo33 {
                                     System.out.println("| Certificat valide selon la CRL pour : " + certList.get(id).getSubjectX500Principal());
                                 }
                             } else {
-                                System.out.println("| CRL expirée ---- date d'update crl : "+ crl.getNextUpdate() + " > " + date);
+                                System.out.println("| CRL expirée ---- date d'update crl : "+ crl.getNextUpdate() + " < " + date);
                                 try (InputStream in = new URL(url).openStream()) {
                                     Files.copy(in, savePath, StandardCopyOption.REPLACE_EXISTING);
                                     file = savePath.toFile();
@@ -202,15 +207,21 @@ public class exo33 {
                                     System.out.println("| Mise à jour de la CRL a échouée : " + e.getMessage()+"\n");
                                 }
                             }
+                            
                         } catch (Exception e) {
                             System.out.println("| L'ouverture de la CRL a échoué : " + e.getMessage() + "\n");
                         }
                     }
-                    //Check OCSP
-                    if(!checkOCSP(certList.get(id), certList.get(id-1), info.ocspUrl)){
-                        System.out.println("| Certificat valide selon l'ocsp pour : " + certList.get(id).getSubjectX500Principal());
                     }else{
-                        System.out.println("| Certificat invalide selon l'ocsp pour : " + certList.get(id).getSubjectX500Principal());
+                        System.out.println("Erreur avec l'url, aucune fichier .crl à téléchargé\n| url : " + url);
+                        System.out.println("| Vérification par CRL impossible : Certificat invalide");
+                    }
+                    //Ajouter la vérification du status de révocation en utilisant le protocole OCSP s'il est disponible pour un
+                    //certificat donné (3.3.2)
+                    if(!checkOCSP(certList.get(id), certList.get(id-1), info.ocspUrl)){
+                        System.out.println("| Certificat valide selon l'OCSP pour : " + certList.get(id).getSubjectX500Principal());
+                    }else{
+                        System.out.println("| Certificat invalide selon l'OCSP pour : " + certList.get(id).getSubjectX500Principal());
                     }
                 }
                 System.out.println();
@@ -218,6 +229,7 @@ public class exo33 {
         return true;
     }
 
+    //fonctio de vérif CRL (lien avec vérif de la CRL demandé 3.3.1)
     private void verifyCRL(X509CRL crl,X509Certificate IssuerCA){
         try{
         crl.verify(IssuerCA.getPublicKey());
@@ -230,6 +242,7 @@ public class exo33 {
         }
     }
 
+    //fonction pour réaliser le point 3.3.2)
     private boolean checkOCSP(X509Certificate cert, X509Certificate issuerCert, String ocspUrl) {
         try{
         CertificateID certId = new CertificateID(
